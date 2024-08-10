@@ -3,7 +3,7 @@ import vertexShader from './src/shaders/vertex.glsl';
 import fragmentShader from './src/shaders/fragment.glsl';
 import { GUI } from 'dat.gui';
 import { EffectComposer } from 'three/examples/jsm/Addons.js';
-import { RenderPass, ShaderPass, SavePass } from 'three/examples/jsm/Addons.js';
+import { RenderPass, ShaderPass, SavePass, BlendShader, CopyShader } from 'three/examples/jsm/Addons.js';
 
 
 const init = ()=>{
@@ -17,10 +17,9 @@ const init = ()=>{
   camera.position.z = 5;
 
 
-  // adding effectscomposer so that it's possible to chain multiple effects together for post-processing.
 
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
+
+
   const dirLight = new THREE.DirectionalLight('#ffffff', 1);
   dirLight.position.set(5, 5, 5).normalize();
   scene.add(dirLight);
@@ -31,9 +30,9 @@ const init = ()=>{
   const geometry = new THREE.IcosahedronGeometry(1, 4);
   // const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
 
-const material = new THREE.ShaderMaterial(
-  vertexShader,
-  fragmentShader
+const material = new THREE.ShaderMaterial({
+  vertexShader:vertexShader,
+  fragmentShader: fragmentShader}
 )
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -46,6 +45,34 @@ const material = new THREE.ShaderMaterial(
  cameraSettings.add(camera.position,'z', 0, 10).name('zoom');
   cameraSettings.open();
  
+  // adding effectscomposer so that it's possible to chain multiple effects together for post-processing.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera)); //captures screen current state
+
+
+  const renderTargetParameters = {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    stencilBuffer: false,
+  };
+
+  // for creating effects that rely on the previous frame. Saves the output of a scene to a texture that can be reused.
+  const savePass = new SavePass(new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, renderTargetParameters));
+  
+  // blend textures together
+  const blendPass = new ShaderPass(BlendShader, 'tDiffuse1');
+  blendPass.uniforms['tDiffuse2'].value = savePass.renderTarget.texture;
+  // blendPass.uniforms['mixRatio'].value = 0.125; 
+
+  // copy the output of previous pass to the screen
+  const outputPass = new ShaderPass(CopyShader);
+
+  composer.addPass(blendPass);
+  composer.addPass(savePass);
+  outputPass.renderToScreen = true;
+  //render the result of the post-processing to screen
+  composer.addPass(outputPass);
+
 
 
   function animate() {
